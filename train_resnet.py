@@ -26,6 +26,32 @@ import torch.optim as optim
 
 from torchvision.models import resnet50, resnet101, resnet152
 
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+
+def adjust_learning_rate(lr, optimizer, steps, epoch, gamma):
+    if epoch in steps:
+        lr = lr*gamma
+        for param_group in optimizer.param_groups:
+            param_group['lr'] *= gamma
+    return lr
+
+
 class Bit_yolov3(torch.nn.Module):
     def __init__(self, darknet_model, backbone):
         super(Bit_yolov3, self).__init__()
@@ -167,7 +193,8 @@ if __name__ == "__main__":
 
     lr = opt.learning_rate
     lr_steps = [30,60,90]
-    
+
+    losses = AverageMeter()    
     logger = open(os.path.join(opt.checkpoint_path,'log.txt'), "w+")
     for epoch in range(opt.epochs):
         lr = adjust_learning_rate(lr, optimizer, lr_steps, epoch, gamma=0.1)
@@ -182,7 +209,7 @@ if __name__ == "__main__":
 
             loss, outputs = model(imgs, targets)
             loss.backward()
-
+            losses.update(loss.item(), imgs.size(0))
             if batches_done % opt.gradient_accumulations:
                 # Accumulates gradient before each step
                 optimizer.step()
@@ -254,7 +281,7 @@ if __name__ == "__main__":
 
         log_info = str({ "lr" : lr,
                         "map": AP.mean(),
-                        "loss" : loss.item()})
+                        "loss" : losses.avg)})
         logger.write(log_info + "\n")
         #if epoch % opt.checkpoint_interval == 0:
         best = AP.mean() > best_map
