@@ -43,10 +43,16 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
    
 class Bit_yolov3(torch.nn.Module):
-    def __init__(self, darknet_model, Bit_model):
+    def __init__(self, darknet_model, Bit_model, freeze_some=False):
         super(Bit_yolov3, self).__init__()
 
         self.bit_model = Bit_model
+        
+        if freeze_some:
+            for parameter in self.bit_model.root.parameters():
+                parameter.requires_grad = False
+            for parameter in self.bit_model.body.block1.parameters():
+                parameter.requires_grad = False
 
         self.yolo_layers    = darknet_model.yolo_layers
 
@@ -65,7 +71,8 @@ class Bit_yolov3(torch.nn.Module):
                                 nn.ReLU(),
                                 nn.Conv2d(in_channels=2048, out_channels=18, kernel_size=(1,1))) # 2048 to 18
         self.seen = 0
-
+        
+        
     def forward(self, x, targets=None):
        
         loss = 0 
@@ -113,6 +120,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_cpu", type=int, default=8, help="number of cpu threads to use during batch generation")
     parser.add_argument("--img_size", type=int, default=416, help="size of each image dimension")
     parser.add_argument("--compute_map", default=False, help="if True computes mAP every tenth batch")
+    parser.add_argument("--freeze_some", default=False, help="if True, freezes conv1 bn1 and layer1")
     parser.add_argument("--multiscale_training", default=True, help="allow for multi-scale training")
     parser.add_argument("--checkpoint_path", type=str, default="checkpoint")
     parser.add_argument("--learning_rate", type=float, default=1e-3)
@@ -141,7 +149,7 @@ if __name__ == "__main__":
     # Initiate model
     darknet_model = Darknet(opt.model_def).to(device)
     #model.apply(weights_init_normal)
-    model = Bit_yolov3(darknet_model, bit_model).to(device)
+    model = Bit_yolov3(darknet_model, bit_model, freeze_some=opt.freeze_some).to(device)
     # If specified we start from checkpoint
     if opt.pretrained_weights:
         if opt.pretrained_weights.endswith(".pth"):
